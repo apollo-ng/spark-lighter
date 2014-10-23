@@ -1,0 +1,10 @@
+#!/bin/sh
+
+PATH=$PATH:$HOME/src/spark-core/gcc-arm-none-eabi-4_8-2014q2/bin
+
+cd ../core-firmware/build
+ln -s ../../spark-lighter ../applications/spark-lighter
+make APP=spark-lighter
+RES=$?
+rm ../applications/spark-lighter
+exit $RES
