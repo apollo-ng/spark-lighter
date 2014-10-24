@@ -23,6 +23,8 @@
  ******************************************************************************
  */
 
+#define VERBOSE
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Includes ///////////////////////////////////////////////////////////////////
 
@@ -92,9 +94,8 @@ int                     setRGBW         (String rgbwInt)                        
 void                    setPWM          (uint8_t pin, uint8_t value)            ;
 void                    fadeTo          (long rgbw, int delaytime)              ;
 void                    autolight       (int target)                            ;
-void                    motion          (void)                                  ;
+void                    motionISR       (void)                                  ;
 uint16_t                readT6K         (void)                                  ;
-
 
 
 
@@ -106,7 +107,7 @@ SYSTEM_MODE                             (AUTOMATIC)                             
 
 void                    setup           ()
 {
-    #ifdef DEBUG
+    #ifdef VERBOSE
     Serial.begin                        (9600)                                  ;
     #endif
 
@@ -116,7 +117,7 @@ void                    setup           ()
     // Set up DYP-ME003 Passive Infrared Sensor ////////////////////////////////
 
     pinMode                             (pinPIR, INPUT_PULLDOWN)                ;
-    attachInterrupt                     (pinPIR, motion, RISING)                ;
+    attachInterrupt                     (pinPIR, motionISR, RISING)             ;
 
     // Set up MOSFET Gate Driver output lines //////////////////////////////////
 
@@ -124,7 +125,6 @@ void                    setup           ()
     pinMode                             (pinG, OUTPUT)                          ;
     pinMode                             (pinB, OUTPUT)                          ;
     pinMode                             (pinW, OUTPUT)                          ;
-
 
     /// Close all PWM valves, to keep time of uncontrolled state at minimum. Also
     /// in this context: I had to add 4 pull-down resistors (10k), each between
@@ -136,7 +136,6 @@ void                    setup           ()
     setPWM                              (pinB, 0)                               ;
     setPWM                              (pinW, 0)                               ;
 
-
     ////////////////////////////////////////////////////////////////////////////
     /// Expose variables & function through spark-server API ///////////////////
 
@@ -146,7 +145,6 @@ void                    setup           ()
     Spark.variable                      ("ledw", &ledW, INT)                    ;
     Spark.variable                      ("ambLux", &ambLux, INT)                ;
     Spark.function                      ("setrgbw", setRGBW)                    ;
-
 
     ////////////////////////////////////////////////////////////////////////////
     /// Set Ready-State bit ////////////////////////////////////////////////////
@@ -177,7 +175,7 @@ void                    loop            ()
 
     if                                  ((state & 0x2) == 0x2)
     {
-        #ifdef DEBUG
+        #ifdef VERBOSE
         Serial.println                  ("Motion Detected")                     ;
         #endif
 
@@ -197,7 +195,7 @@ void                    loop            ()
 
         if                              ((state & 0x4) == 0)
         {
-            #ifdef DEBUG
+            #ifdef VERBOSE
             Serial.println              ("New presence detected")               ;
             #endif
 
@@ -226,7 +224,7 @@ void                    loop            ()
         {
             if(EGP < GPM)
             {
-                #ifdef DEBUG
+                #ifdef VERBOSE
                 Serial.println("Boosting GP +10...");
                 #endif
 
@@ -251,7 +249,7 @@ void                    loop            ()
     {
         timeDiff        = (int)         (millis() - lastMotion)/1000            ;
 
-        #ifdef DEBUG
+        #ifdef VERBOSE
         Serial.print                    ("Last Motion: ")                       ;
         Serial.println                  (timeDiff)                              ;
         #endif
@@ -262,7 +260,7 @@ void                    loop            ()
         {
             // I'm confident no one is any longer present //////////////////////
 
-            #ifdef DEBUG
+            #ifdef VERBOSE
             Serial.println              ("No one present - Shutting down")      ;
             #endif
 
@@ -278,15 +276,13 @@ void                    loop            ()
             // Let there be darkness ///////////////////////////////////////////
 
             autolight                   (0)                                     ;
-
-            // Go into standby until external event (AZIIZZ, Light!!!!) ////////
-            __WFI                       ()                                      ;
         }
+
         else if                         (timeDiff > EGP)
         {
             if                          ((state & 0x8) == 0)
             {
-                #ifdef DEBUG
+                #ifdef VERBOSE
                 Serial.println          ("Grace Period started - Fading down")  ;
                 #endif
 
@@ -302,7 +298,7 @@ void                    loop            ()
 
     ambLux              = readT6K       ()                                      ;
 
-    #ifdef DEBUG
+    #ifdef VERBOSE
     Serial.println                      ("------------------------------------");
     Serial.println                      (millis())                              ;
     Serial.print                        (" -> Ambient Light: ")                 ;
@@ -313,7 +309,7 @@ void                    loop            ()
     Serial.println                      (WiFi.RSSI())                           ;
     #endif
 
-    delay                               (200)                                   ;
+    delay                               (150)                                   ;
 }
 
 /// END MAIN LOOP //////////////////////////////////////////////////////////////
@@ -421,7 +417,7 @@ void                    fadeTo          (long rgbw, int delaytime)
 {
     uint8_t completed   =               0x0                                     ;
 
-    #ifdef DEBUG
+    #ifdef VERBOSE
     Serial.println                      ("Fading to new target")                ;
     #endif
 
@@ -430,7 +426,6 @@ void                    fadeTo          (long rgbw, int delaytime)
     uint8_t newR        =               (rgbw >> 24) & 0xFF                     ;
     uint8_t newG        =               (rgbw >> 16) & 0xFF                     ;
     uint8_t newB        =               (rgbw >>  8) & 0xFF                     ;
-
     uint8_t newW        = (int)         ((rgbw >> 0) & 0xFF)                    ;
 
     while                               (completed != 15)
@@ -494,7 +489,7 @@ void                    fadeTo          (long rgbw, int delaytime)
         delay                           (delaytime)                             ;
     }
 
-    #ifdef DEBUG
+    #ifdef VERBOSE
     Serial.print                        ("R: ")                                 ;
     Serial.println                      (ledR)                                  ;
     Serial.print                        ("G: ")                                 ;
@@ -517,7 +512,7 @@ uint16_t                readT6K         (void)
     return                              (D * 0.161172)                          ;
 }
 
-void                    motion          (void)
+void                    motionISR       (void)
 {
     RGB.control                         (true)                                  ;
     RGB.color                           (30, 255, 5)                            ;
@@ -526,7 +521,7 @@ void                    motion          (void)
 
 int                     setRGBW         (String rgbwInt)
 {
-    #ifdef DEBUG
+    #ifdef VERBOSE
     Serial.print                        ("setRGBW Called: ")                    ;
     Serial.println                      (rgbwInt)                               ;
     #endif
