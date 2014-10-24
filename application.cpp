@@ -23,14 +23,14 @@
  ******************************************************************************
  */
 
-#define VERBOSE
+#define                                 VERBOSE
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Includes ///////////////////////////////////////////////////////////////////
 
-#include "application.h"
-#include "DS18B20.h"
-#include "OneWire.h"
+#include                                "application.h"
+#include                                "DS18B20.h"
+#include                                "OneWire.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Hardware I/O mapping ///////////////////////////////////////////////////////
@@ -99,6 +99,7 @@ void                    setPWM          (uint8_t pin, uint8_t value)            
 void                    fadeTo          (long rgbw, int delaytime)              ;
 void                    autolight       (int target)                            ;
 void                    motionISR       (void)                                  ;
+void                    eventHandler    (const char *event, const char *data)   ;
 uint16_t                readT6K         (void)                                  ;
 float                   readDS18B20     (void)                                  ;
 
@@ -115,7 +116,7 @@ SYSTEM_MODE                             (AUTOMATIC)                             
 void                    setup           ()
 {
     #ifdef VERBOSE
-    Serial.begin                        (9600)                                  ;
+        Serial.begin                    (9600)                                  ;
     #endif
 
     ////////////////////////////////////////////////////////////////////////////
@@ -146,13 +147,14 @@ void                    setup           ()
     ////////////////////////////////////////////////////////////////////////////
     /// Expose variables & function through spark-server API ///////////////////
 
-    Spark.variable                      ("ledr", &ledR, INT)                    ;
-    Spark.variable                      ("ledg", &ledG, INT)                    ;
-    Spark.variable                      ("ledb", &ledB, INT)                    ;
-    Spark.variable                      ("ledw", &ledW, INT)                    ;
-    Spark.variable                      ("amblux", &ambLux, INT)                ;
-    Spark.variable                      ("ambtmp", &ambTmp, DOUBLE)             ;
-    Spark.function                      ("setrgbw", setRGBW)                    ;
+    Spark.variable                      ("ledr",    &ledR,      INT)            ;
+    Spark.variable                      ("ledg",    &ledG,      INT)            ;
+    Spark.variable                      ("ledb",    &ledB,      INT)            ;
+    Spark.variable                      ("ledw",    &ledW,      INT)            ;
+    Spark.variable                      ("amblux",  &ambLux,    INT)            ;
+    Spark.variable                      ("ambtmp",  &ambTmp, DOUBLE)            ;
+    Spark.function                      ("setrgbw", setRGBW        )            ;
+    Spark.subscribe                     ("alerts",  eventHandler   )            ;
 
     ////////////////////////////////////////////////////////////////////////////
     /// Set Ready-State bit ////////////////////////////////////////////////////
@@ -184,7 +186,7 @@ void                    loop            ()
     if                                  ((state & 0x2) == 0x2)
     {
         #ifdef VERBOSE
-        Serial.println                  ("Motion Detected")                     ;
+            Serial.println              ("Motion Detected")                     ;
         #endif
 
         // Clear motion trigger state bit //////////////////////////////////////
@@ -204,7 +206,7 @@ void                    loop            ()
         if                              ((state & 0x4) == 0)
         {
             #ifdef VERBOSE
-            Serial.println              ("New presence detected")               ;
+                Serial.println          ("New presence detected")               ;
             #endif
 
             // Set presence state bit (4) //////////////////////////////////////
@@ -233,7 +235,7 @@ void                    loop            ()
             if(EGP < GPM)
             {
                 #ifdef VERBOSE
-                Serial.println("Boosting GP +10...");
+                    Serial.println      (" -> Boosting GP +10...")              ;
                 #endif
 
                 EGP     =               EGP+10                                  ;
@@ -258,8 +260,8 @@ void                    loop            ()
         timeDiff        = (int)         (millis() - lastMotion)/1000            ;
 
         #ifdef VERBOSE
-        Serial.print                    ("Last Motion: ")                       ;
-        Serial.println                  (timeDiff)                              ;
+            Serial.print                (" -> Last Motion: ")                   ;
+            Serial.println              (timeDiff)                              ;
         #endif
 
         // Compare last motion time distance for graceful auto powerdown ///////
@@ -269,7 +271,7 @@ void                    loop            ()
             // I'm confident no one is any longer present //////////////////////
 
             #ifdef VERBOSE
-            Serial.println              ("No one present - Shutting down")      ;
+                Serial.println          ("No one present - Shutting down")      ;
             #endif
 
             // Unset presence (4) and grace-period (8) status bits /////////////
@@ -291,7 +293,7 @@ void                    loop            ()
             if                          ((state & 0x8) == 0)
             {
                 #ifdef VERBOSE
-                Serial.println          ("Grace Period started - Fading down")  ;
+                    Serial.println      ("Grace Period started - Fading down")  ;
                 #endif
 
                 // Set grace period state bit (8) //////////////////////////////
@@ -311,19 +313,18 @@ void                    loop            ()
     Spark.publish                       ("temperature", tmpData, 60, PRIVATE)   ;
 
     #ifdef VERBOSE
-    Serial.println                      (millis())                              ;
-    Serial.print                        (" -> State: ")                         ;
-    Serial.println                      (state)                                 ;
-    Serial.print                        (" -> Ambient Light: ")                 ;
-    Serial.println                      (ambLux, DEC)                           ;
-    Serial.print                        (" -> Ambient Temp: ")                  ;
-    Serial.println                      (tmpData)                               ;
-    Serial.print                        (" -> RSSI: ")                          ;
-    Serial.println                      (WiFi.RSSI())                           ;
-    Serial.println                      ("------------------------------------");
+        Serial.print                    (" -> Timestamp: ")                     ;
+        Serial.println                  (millis())                              ;
+        Serial.print                    (" -> State: ")                         ;
+        Serial.println                  (state, BIN)                            ;
+        Serial.print                    (" -> Ambient Light: ")                 ;
+        Serial.println                  (ambLux, DEC)                           ;
+        Serial.print                    (" -> Ambient Temp: ")                  ;
+        Serial.println                  (tmpData)                               ;
+        Serial.print                    (" -> RSSI: ")                          ;
+        Serial.println                  (WiFi.RSSI())                           ;
+        Serial.println                  ("------------------------------------");
     #endif
-
-    delay                               (150)                                   ;
 }
 
 /// END MAIN LOOP //////////////////////////////////////////////////////////////
@@ -432,7 +433,7 @@ void                    fadeTo          (long rgbw, int delaytime)
     uint8_t completed   =               0x0                                     ;
 
     #ifdef VERBOSE
-    Serial.println                      ("Fading to new target")                ;
+        Serial.println                  ("Fading to new target")                ;
     #endif
 
     // Separate colors from combined 32bit RGBA long ///////////////////////////
@@ -504,14 +505,14 @@ void                    fadeTo          (long rgbw, int delaytime)
     }
 
     #ifdef VERBOSE
-    Serial.print                        ("R: ")                                 ;
-    Serial.println                      (ledR)                                  ;
-    Serial.print                        ("G: ")                                 ;
-    Serial.println                      (ledG)                                  ;
-    Serial.print                        ("B: ")                                 ;
-    Serial.println                      (ledB)                                  ;
-    Serial.print                        ("W: ")                                 ;
-    Serial.println                      (ledW)                                  ;
+        Serial.print                    ("R: ")                                 ;
+        Serial.println                  (ledR)                                  ;
+        Serial.print                    ("G: ")                                 ;
+        Serial.println                  (ledG)                                  ;
+        Serial.print                    ("B: ")                                 ;
+        Serial.println                  (ledB)                                  ;
+        Serial.print                    ("W: ")                                 ;
+        Serial.println                  (ledW)                                  ;
     #endif
 }
 
@@ -530,7 +531,7 @@ float                   readDS18B20     (void)
 {
     float temp          =               0                                       ;
     ds18b20.search                      ()                                      ;
-    temp                = ds18b20.getTemperature()                              ;
+    temp                = ds18b20.      getTemperature()                        ;
     ds18b20.resetsearch                 ()                                      ;
     return                              temp                                    ;
 }
@@ -542,11 +543,21 @@ void                    motionISR       (void)
     state              |=               0x2                                     ;
 }
 
+void                    eventHandler    (const char *event, const char *data)
+{
+    #ifdef VERBOSE
+        Serial.print                    (" -> Event Received: ")                ;
+        Serial.println                  (data)                                  ;
+    #endif
+
+    //FIXME: Well, do something with it
+}
+
 int                     setRGBW         (String rgbwInt)
 {
     #ifdef VERBOSE
-    Serial.print                        ("setRGBW Called: ")                    ;
-    Serial.println                      (rgbwInt)                               ;
+        Serial.print                    ("setRGBW Called: ")                    ;
+        Serial.println                  (rgbwInt)                               ;
     #endif
     fadeTo                              (rgbwInt.toInt(), 20)                   ;
     return                              1                                       ;
