@@ -29,7 +29,8 @@
 /// Includes ///////////////////////////////////////////////////////////////////
 
 #include "application.h"
-
+#include "DS18B20.h"
+#include "OneWire.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Hardware I/O mapping ///////////////////////////////////////////////////////
@@ -38,6 +39,7 @@
 
 const uint8_t pinPIR    =               2                                       ;
 const uint8_t pinAMB    =               10                                      ;
+const uint8_t pinTMP    =               4                                       ;
 
 // Outputs (RGBW Channels -> [A4:A7] -> MOSFET/Gatedriver inputs ) /////////////
 
@@ -66,11 +68,13 @@ uint32_t lastTimeSync   = millis        ();
 
 // Numeric /////////////////////////////////////////////////////////////////////
 
+float ambTmp            =               0                                       ;
 uint16_t ambLux         =               0                                       ;
 uint8_t ledR            =               0                                       ;
 uint8_t ledG            =               0                                       ;
 uint8_t ledB            =               0                                       ;
 uint8_t ledW            =               0                                       ;
+char tmpData[64];
 
 // Bitwise /////////////////////////////////////////////////////////////////////
 
@@ -96,12 +100,15 @@ void                    fadeTo          (long rgbw, int delaytime)              
 void                    autolight       (int target)                            ;
 void                    motionISR       (void)                                  ;
 uint16_t                readT6K         (void)                                  ;
+float                   readDS18B20     (void)                                  ;
 
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Setup //////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+
+DS18B20 ds18b20         = DS18B20       (pinTMP)                                ;
 
 SYSTEM_MODE                             (AUTOMATIC)                             ;
 
@@ -143,7 +150,8 @@ void                    setup           ()
     Spark.variable                      ("ledg", &ledG, INT)                    ;
     Spark.variable                      ("ledb", &ledB, INT)                    ;
     Spark.variable                      ("ledw", &ledW, INT)                    ;
-    Spark.variable                      ("ambLux", &ambLux, INT)                ;
+    Spark.variable                      ("amblux", &ambLux, INT)                ;
+    Spark.variable                      ("ambtmp", &ambTmp, DOUBLE)             ;
     Spark.function                      ("setrgbw", setRGBW)                    ;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -297,16 +305,22 @@ void                    loop            ()
     }
 
     ambLux              = readT6K       ()                                      ;
+    ambTmp              = readDS18B20   ()                                      ;
+
+    sprintf                             (tmpData, "{ 'C': %4.1f }", ambTmp)     ;
+    Spark.publish                       ("temperature", tmpData, 60, PRIVATE)   ;
 
     #ifdef VERBOSE
-    Serial.println                      ("------------------------------------");
     Serial.println                      (millis())                              ;
-    Serial.print                        (" -> Ambient Light: ")                 ;
-    Serial.println                      (ambLux, DEC)                           ;
     Serial.print                        (" -> State: ")                         ;
     Serial.println                      (state)                                 ;
+    Serial.print                        (" -> Ambient Light: ")                 ;
+    Serial.println                      (ambLux, DEC)                           ;
+    Serial.print                        (" -> Ambient Temp: ")                  ;
+    Serial.println                      (tmpData)                               ;
     Serial.print                        (" -> RSSI: ")                          ;
     Serial.println                      (WiFi.RSSI())                           ;
+    Serial.println                      ("------------------------------------");
     #endif
 
     delay                               (150)                                   ;
@@ -510,6 +524,15 @@ uint16_t                readT6K         (void)
     uint16_t lux        =               I * 1000000 * 2                         ;
     */
     return                              (D * 0.161172)                          ;
+}
+
+float                   readDS18B20     (void)
+{
+    float temp          =               0                                       ;
+    ds18b20.search                      ()                                      ;
+    temp                = ds18b20.getTemperature()                              ;
+    ds18b20.resetsearch                 ()                                      ;
+    return                              temp                                    ;
 }
 
 void                    motionISR       (void)
