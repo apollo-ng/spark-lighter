@@ -1,18 +1,8 @@
 /*
-I needed more control over the PWM than analogWrite() could offer. The 500Hz
-wasn't enough for my eyes to appear as flicker free. I'm running with 1kHz now
-and so far I cannot really tell anymore. There is residual doubt sometimes, when
-I move my head and accelerate my eyeballs from one corner of the vision field into
-the opposite one, both in the same direction.
-
-Maybe it's time to try to describe the effect a bit more in detail
-
 https://gist.github.com/technobly/8313449 Thanks @ (Technobly/BDub)
 */
 
-#include "application.h"
 #include "pwm.h"
-
 
 void                    setPWM          (uint8_t pin, uint8_t value)
 {

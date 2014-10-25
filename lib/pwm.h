@@ -1,3 +1,5 @@
+#include "application.h"
+
 // Desired PWM Frequency in Hertz //////////////////////////////////////////////
 
 const uint16_t PWM_FREQ =               1000                                    ;

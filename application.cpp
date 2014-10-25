@@ -20,20 +20,20 @@
 
   You should have received a copy of the GNU Lesser General Public
   License along with this program; if not, see <http://www.gnu.org/licenses/>.
- ******************************************************************************
- */
-
-#define                                 VERBOSE
+ ******************************************************************************/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Includes ///////////////////////////////////////////////////////////////////
 
 #include                                "application.h"
-#include                                "DS18B20.h"
-#include                                "OneWire.h"
+#include                                "lib/DS18B20.h"
+#include                                "lib/OneWire.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Hardware I/O mapping ///////////////////////////////////////////////////////
+/// Robot Configuration (Change your local settings here) //////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+#define                                 VERBOSE
 
 // Inputs (DYP-ME003 PIR Sensor -> D2 & TEMT6000 Ambient Light Sensor -> A0) ///
 
@@ -48,39 +48,42 @@ const uint8_t pinG      =               14                                      
 const uint8_t pinB      =               17                                      ;
 const uint8_t pinW      =               16                                      ;
 
-
-////////////////////////////////////////////////////////////////////////////////
 /// Time mapping ///////////////////////////////////////////////////////////////
 
 const uint8_t GPB       =               30; // Grace Period Baselength in Seconds
 const uint8_t GPM       =               90; // Maximum Grace Period length in Seconds
-const uint8_t bNight    =               21; // Begin of Night hours
+const uint8_t bNight    =               26; // Begin of Night hours
 const uint8_t eNight    =               6;  // End of Night hours
-
-uint8_t EGP             =               GPB;// Elastic Grace Period length (dynamic)
-uint16_t timeDiff       =               0;
-uint32_t lastMotion     =               0;
-uint32_t lastTimeSync   = millis        ();
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// States /////////////////////////////////////////////////////////////////////
+/// Init ///////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-// Numeric /////////////////////////////////////////////////////////////////////
+// Elastic Grace Period length (variable - starts with baselength) /////////////
 
-float ambTmp            =               0                                       ;
-uint16_t ambLux         =               0                                       ;
-uint8_t ledR            =               0                                       ;
-uint8_t ledG            =               0                                       ;
-uint8_t ledB            =               0                                       ;
-uint8_t ledW            =               0                                       ;
-char tmpData[64];
+uint8_t     EGP         =               GPB                                     ;
 
-// Bitwise /////////////////////////////////////////////////////////////////////
+// LEDs ////////////////////////////////////////////////////////////////////////
 
-uint8_t state           =               0x0                                     ;
+uint8_t     ledR        =               0                                       ;
+uint8_t     ledG        =               0                                       ;
+uint8_t     ledB        =               0                                       ;
+uint8_t     ledW        =               0                                       ;
 
-/* State Table ****************************************************************/
+// Time ////////////////////////////////////////////////////////////////////////
+
+uint16_t    timeDiff    =               0                                       ;
+uint32_t    lastMotion  =               0                                       ;
+uint32_t    lastTSync   =               0                                       ;
+
+// Environment  ////////////////////////////////////////////////////////////////
+
+uint16_t    ambLux      =               0                                       ;
+float       ambTmp      =               0                                       ;
+char        tmpData[64]                                                         ;
+
+// Bitwise State Table /////////////////////////////////////////////////////////////
 /*
    0x1                  :               Online & Ready
    0x2                  :               PIR Motion triggered
@@ -90,16 +93,16 @@ uint8_t state           =               0x0                                     
    0x32                 :               Night
 */
 
+uint8_t     state       =               0x0                                     ;
 
-////////////////////////////////////////////////////////////////////////////////
-/// Function prototypes ////////////////////////////////////////////////////////
+// Function prototypes /////////////////////////////////////////////////////////
 
 int                     setRGBW         (String rgbwInt)                        ;
 void                    setPWM          (uint8_t pin, uint8_t value)            ;
 void                    fadeTo          (long rgbw, int delaytime)              ;
 void                    autolight       (int target)                            ;
 void                    motionISR       (void)                                  ;
-void                    eventHandler    (const char *event, const char *data)   ;
+void                    alertESR        (const char *event, const char *data)   ;
 uint16_t                readT6K         (void)                                  ;
 float                   readDS18B20     (void)                                  ;
 
@@ -154,7 +157,7 @@ void                    setup           ()
     Spark.variable                      ("amblux",  &ambLux,    INT)            ;
     Spark.variable                      ("ambtmp",  &ambTmp, DOUBLE)            ;
     Spark.function                      ("setrgbw", setRGBW        )            ;
-    Spark.subscribe                     ("alerts",  eventHandler   )            ;
+    Spark.subscribe                     ("alerts",  alertESR       )            ;
 
     ////////////////////////////////////////////////////////////////////////////
     /// Set Ready-State bit ////////////////////////////////////////////////////
@@ -173,10 +176,10 @@ void                    loop            ()
     ////////////////////////////////////////////////////////////////////////////
     /// Already time to request time synchronization (1h)? /////////////////////
 
-    if                                  (millis() - lastTimeSync > 3600000)
+    if                                  (millis() - lastTSync > 3600000)
     {
         Spark.syncTime                  ()                                      ;
-        lastTimeSync    = millis        ()                                      ;
+        lastTSync       = millis        ()                                      ;
     }
 
 
@@ -325,6 +328,7 @@ void                    loop            ()
         Serial.println                  (WiFi.RSSI())                           ;
         Serial.println                  ("------------------------------------");
     #endif
+
 }
 
 /// END MAIN LOOP //////////////////////////////////////////////////////////////
@@ -347,7 +351,7 @@ void                    autolight       (int target)
             {
                 ledR++                                                          ;
                 setPWM                  (pinR, ledR)                            ;
-                delay                   (20)                                    ;
+                delay                   (40)                                    ;
             }
         }
         else
@@ -356,7 +360,7 @@ void                    autolight       (int target)
 
             while                       (ledW < 255 && ambLux < 250)
             {
-                ledW++                                                          ;
+                ledW                    ++                                      ;
                 setPWM                  (pinW, ledW)                            ;
                 delay                   (20)                                    ;
                 ambLux  = readT6K       ()                                      ;
@@ -399,7 +403,7 @@ void                    autolight       (int target)
         ////////////////////////////////////////////////////////////////////////
         // Fade Down all
         // FIXME: This is still buggy, there has to be some more thought about
-        // collisions between autolight and user overrides.
+        // collisions between autolight and user/event overrides.
 
         if                              (  Time.hour() < eNight
                                         || Time.hour() > bNight)
@@ -538,19 +542,27 @@ float                   readDS18B20     (void)
 
 void                    motionISR       (void)
 {
+    // Set motion state bit (2) ////////////////////////////////////////////////
+
+    state              |=               0x2                                     ;
+
     RGB.control                         (true)                                  ;
     RGB.color                           (30, 255, 5)                            ;
-    state              |=               0x2                                     ;
 }
 
-void                    eventHandler    (const char *event, const char *data)
+void                    alertESR        (const char *event, const char *data)
 {
+    // Set event notification state bit (16) ///////////////////////////////////
+
+    state              |=               0x16                                    ;
+
     #ifdef VERBOSE
         Serial.print                    (" -> Event Received: ")                ;
         Serial.println                  (data)                                  ;
     #endif
 
     //FIXME: Well, do something with it
+    //setPWM                              (pinB, 255)                            ;
 }
 
 int                     setRGBW         (String rgbwInt)
